@@ -1,0 +1,64 @@
+[
+  {
+    "stop_id": "31412",
+    "stop_lat": 43.3504,
+    "stop_lon": -8.412142,
+    "stop_name": "A Coruña"
+  },
+  {
+    "stop_id": "23021",
+    "stop_lat": 42.78122,
+    "stop_lon": -8.656493,
+    "stop_name": "Padrón-Barbanza"
+  },
+  {
+    "stop_id": "08224",
+    "stop_lat": 42.28455,
+    "stop_lon": -8.603739,
+    "stop_name": "Redondela AV"
+  },
+  {
+    "stop_id": "22201",
+    "stop_name": "O Porriño"
+  },
+  {
+    "stop_id": "22006",
+    "stop_name": "Barra de Miño"
+  },
+  {
+    "stop_id": "20208",
+    "stop_name": "Quereño"
+  },
+  {
+    "stop_id": "22109",
+    "stop_name": "Salvaterra de Miño"
+  },
+  {
+    "stop_id": "20410",
+    "stop_name": "Elviña-Universstop_idade"
+  },
+  {
+    "stop_id": "20318",
+    "stop_name": "Piñoi"
+  },
+  {
+    "stop_id": "21002",
+    "stop_name": "Miño"
+  },
+  {
+    "stop_id": "31304",
+    "stop_name": "O Carballiño"
+  },
+  {
+    "stop_id": "96122",
+    "stop_name": "Barcelos"
+  },
+  {
+    "stop_id": "94033",
+    "stop_name": "Viana do Castelo"
+  },
+  {
+    "stop_id": "22402",
+    "stop_name": "Valença do Minho"
+  }
+]

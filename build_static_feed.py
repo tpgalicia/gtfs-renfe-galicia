@@ -6,6 +6,7 @@
 # ///
 
 import csv
+import json
 import os
 import shutil
 import tempfile
@@ -129,8 +130,17 @@ if __name__ == "__main__":
                 dest_file.write(src_file.read())
 
     # Write new stops.txt with the stops in any trip that passes through Galicia
+    with open(os.path.join(os.path.dirname(__file__), "stop_overrides.json"), "r", encoding="utf-8") as f:
+        stop_overrides = json.load(f)
+
     distinct_stop_ids = get_distinct_stops_from_stop_times(STOP_TIMES_FILE, trip_ids)
     stops_in_trips = get_rows_by_ids(STOPS_FILE, 'stop_id', distinct_stop_ids)
+    for stop in stops_in_trips:
+        stop['stop_code'] = stop['stop_id']
+        if stop['stop_id'] in stop_overrides:
+            for key, value in stop_overrides[stop['stop_id']].items():
+                stop[key] = value
+
     with open(os.path.join(OUTPUT_GTFS_PATH, 'stops.txt'), 'w', encoding='utf-8', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=stops_in_trips[0].keys())
         writer.writeheader()
