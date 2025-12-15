@@ -1,0 +1,7 @@
+services:
+  osrm:
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "5050:5000"
