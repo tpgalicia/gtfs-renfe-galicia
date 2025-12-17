@@ -142,10 +142,15 @@ if __name__ == "__main__":
         default="http://localhost:5050",
         required=False,
     )
-    parser.add_argument    (
+    parser.add_argument(
+        "--no-shapes",
+        help="Disable shape generation with OSRM",
+        action="store_true"
+    )
+    parser.add_argument(
         "--debug",
-        type=bool,
-        help="Enable debug logging"
+        help="Enable debug logging",
+        action="store_true"
     )
 
     args = parser.parse_args()
@@ -206,7 +211,12 @@ if __name__ == "__main__":
             "r",
             encoding="utf-8",
         ) as f:
-            stop_overrides = json.load(f)
+            stop_overrides_raw: list = json.load(f)
+            stop_overrides = {
+                item["stop_id"]: item
+                for item in stop_overrides_raw
+            }
+            logging.debug(f"Loaded stop overrides for {len(stop_overrides)} stops.")
 
         distinct_stop_ids = get_distinct_stops_from_stop_times(
             STOP_TIMES_FILE, trip_ids
@@ -214,7 +224,7 @@ if __name__ == "__main__":
         stops_in_trips = get_rows_by_ids(STOPS_FILE, "stop_id", distinct_stop_ids)
         for stop in stops_in_trips:
             stop["stop_code"] = stop["stop_id"]
-            if stop["stop_id"] in stop_overrides:
+            if stop_overrides.get(stop["stop_id"], None) is not None:
                 for key, value in stop_overrides[stop["stop_id"]].items():
                     stop[key] = value
 
@@ -247,7 +257,8 @@ if __name__ == "__main__":
 
         trips_in_galicia = get_rows_by_ids(TRIPS_FILE, "trip_id", trip_ids)
         for tig in trips_in_galicia:
-            tig["shape_id"] = f"Shape_{tig['trip_id'][0:5]}"
+            if not args.no_shapes:
+                tig["shape_id"] = f"Shape_{tig['trip_id'][0:5]}"
             tig["trip_headsign"] = last_stop_in_trips[tig["trip_id"]]
         with open(
             os.path.join(OUTPUT_GTFS_PATH, "trips.txt"),
@@ -273,58 +284,61 @@ if __name__ == "__main__":
 
         logging.info("GTFS data for Galicia has been extracted successfully. Generate shapes for the trips...")
 
-        shape_ids_total = len(set(f"Shape_{trip_id[0:5]}" for trip_id in trip_ids))
-        shape_ids_generated: set[str] = set()
+        if not args.no_shapes:
+            shape_ids_total = len(set(f"Shape_{trip_id[0:5]}" for trip_id in trip_ids))
+            shape_ids_generated: set[str] = set()
 
-        OSRM_BASE_URL = f"{args.osrm_url}/route/v1/driving/"
-        for trip_id in tqdm(trip_ids, total=shape_ids_total, desc="Generating shapes"):
-            shape_id = f"Shape_{trip_id[0:5]}"
-            if shape_id in shape_ids_generated:
-                continue
+            OSRM_BASE_URL = f"{args.osrm_url}/route/v1/driving/"
+            for trip_id in tqdm(trip_ids, total=shape_ids_total, desc="Generating shapes"):
+                shape_id = f"Shape_{trip_id[0:5]}"
+                if shape_id in shape_ids_generated:
+                    continue
 
-            stop_seq = get_rows_by_ids(STOP_TIMES_FILE, "trip_id", [trip_id])
-            stop_seq.sort(key=lambda x: int(x["stop_sequence"].strip()))
+                stop_seq = get_rows_by_ids(STOP_TIMES_FILE, "trip_id", [trip_id])
+                stop_seq.sort(key=lambda x: int(x["stop_sequence"].strip()))
 
-            coordinates = []
-            for stop_time in stop_seq:
-                stop = get_rows_by_ids(STOPS_FILE, "stop_id", [stop_time["stop_id"]])[0]
-                coordinates.append(f"{stop['stop_lon']},{stop['stop_lat']}")
+                coordinates = []
+                for stop_time in stop_seq:
+                    stop = get_rows_by_ids(STOPS_FILE, "stop_id", [stop_time["stop_id"]])[0]
+                    coordinates.append(f"{stop['stop_lon']},{stop['stop_lat']}")
 
-            coords_str = ";".join(coordinates)
-            osrm_url = f"{OSRM_BASE_URL}{coords_str}?overview=full&geometries=geojson"
-            response = requests.get(osrm_url)
-            data = response.json()
+                coords_str = ";".join(coordinates)
+                osrm_url = f"{OSRM_BASE_URL}{coords_str}?overview=full&geometries=geojson"
+                response = requests.get(osrm_url)
+                data = response.json()
 
-            line_path = data["routes"][0]["geometry"]
-            shape_points = line_path["coordinates"]
-            shape_ids_generated.add(shape_id)
+                line_path = data["routes"][0]["geometry"]
+                shape_points = line_path["coordinates"]
+                shape_ids_generated.add(shape_id)
 
-            with open(
-                os.path.join(OUTPUT_GTFS_PATH, "shapes.txt"),
-                "a",
-                encoding="utf-8",
-                newline="",
-            ) as f:
-                fieldnames = [
-                    "shape_id",
-                    "shape_pt_lat",
-                    "shape_pt_lon",
-                    "shape_pt_sequence",
-                ]
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                with open(
+                    os.path.join(OUTPUT_GTFS_PATH, "shapes.txt"),
+                    "a",
+                    encoding="utf-8",
+                    newline="",
+                ) as f:
+                    fieldnames = [
+                        "shape_id",
+                        "shape_pt_lat",
+                        "shape_pt_lon",
+                        "shape_pt_sequence",
+                    ]
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
 
-                if f.tell() == 0:
-                    writer.writeheader()
+                    if f.tell() == 0:
+                        writer.writeheader()
 
-                for seq, point in enumerate(shape_points):
-                    writer.writerow(
-                        {
-                            "shape_id": shape_id,
-                            "shape_pt_lat": point[1],
-                            "shape_pt_lon": point[0],
-                            "shape_pt_sequence": seq,
-                        }
-                    )
+                    for seq, point in enumerate(shape_points):
+                        writer.writerow(
+                            {
+                                "shape_id": shape_id,
+                                "shape_pt_lat": point[1],
+                                "shape_pt_lon": point[0],
+                                "shape_pt_sequence": seq,
+                            }
+                        )
+        else:
+            logging.info("Shape generation skipped as per user request.")
 
         # Create a ZIP archive of the output GTFS
         with zipfile.ZipFile(OUTPUT_GTFS_ZIP, "w", zipfile.ZIP_DEFLATED) as zipf:
