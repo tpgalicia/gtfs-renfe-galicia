@@ -143,17 +143,20 @@ if __name__ == "__main__":
         required=False,
     )
     parser.add_argument(
-        "--no-shapes",
-        help="Disable shape generation with OSRM",
-        action="store_true"
-    )
-    parser.add_argument(
         "--debug",
         help="Enable debug logging",
         action="store_true"
     )
 
     args = parser.parse_args()
+
+    try:
+        osrm_check = requests.head(args.osrm_url, timeout=5)
+        GENERATE_SHAPES = osrm_check.status_code < 500
+    except requests.RequestException:
+        GENERATE_SHAPES = False
+        logging.warning("OSRM server is not reachable. Shape generation will be skipped.")
+
 
     logging.basicConfig(
         level=logging.DEBUG if args.debug else logging.INFO,
@@ -257,7 +260,7 @@ if __name__ == "__main__":
 
         trips_in_galicia = get_rows_by_ids(TRIPS_FILE, "trip_id", trip_ids)
         for tig in trips_in_galicia:
-            if not args.no_shapes:
+            if GENERATE_SHAPES:
                 tig["shape_id"] = f"Shape_{tig['trip_id'][0:5]}"
             tig["trip_headsign"] = last_stop_in_trips[tig["trip_id"]]
         with open(
@@ -284,7 +287,7 @@ if __name__ == "__main__":
 
         logging.info("GTFS data for Galicia has been extracted successfully. Generate shapes for the trips...")
 
-        if not args.no_shapes:
+        if GENERATE_SHAPES:
             shape_ids_total = len(set(f"Shape_{trip_id[0:5]}" for trip_id in trip_ids))
             shape_ids_generated: set[str] = set()
 
