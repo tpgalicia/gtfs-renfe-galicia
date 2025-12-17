@@ -23,8 +23,8 @@ from tqdm import tqdm
 BOUNDS = {"SOUTH": 41.820455, "NORTH": 43.937462, "WEST": -9.437256, "EAST": -6.767578}
 
 FEEDS = {
-    #"general": "1098",
-    #"cercanias": "1130",
+    "general": "1098",
+    "cercanias": "1130",
     "feve": "1131"
 }
 
@@ -84,6 +84,32 @@ def get_distinct_stops_from_stop_times(
     return list(stop_ids)
 
 
+def get_last_stop_for_trips(
+    stoptimes_file: str, trip_ids: list[str]
+) -> dict[str, str]:
+    trip_last: dict[str, str] = {}
+    trip_last_seq: dict[str, int] = {}
+
+    with open(stoptimes_file, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            raise Exception("Fuck you, screw you, fieldnames is None and you just get rekt")
+        reader.fieldnames = [name.strip() for name in reader.fieldnames]
+
+        for stop_time in reader:
+            if stop_time["trip_id"] in trip_ids:
+                trip_id = stop_time["trip_id"]
+                if trip_last.get(trip_id, None) is None:
+                    trip_last[trip_id] = ""
+                    trip_last_seq[trip_id] = -1
+
+                this_stop_seq = int(stop_time["stop_sequence"])
+                if this_stop_seq > trip_last_seq[trip_id]:
+                    trip_last_seq[trip_id] = this_stop_seq
+                    trip_last[trip_id] = stop_time["stop_id"]
+
+    return trip_last
+
 def get_rows_by_ids(input_file: str, id_field: str, ids: list[str]) -> list[dict]:
     rows: list[dict] = []
 
@@ -116,16 +142,21 @@ if __name__ == "__main__":
         default="http://localhost:5050",
         required=False,
     )
+    parser.add_argument    (
+        "--debug",
+        type=bool,
+        help="Enable debug logging"
+    )
 
     args = parser.parse_args()
 
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
     for feed in FEEDS.keys():
-        INPUT_GTFS_ZIP = os.path.join(os.path.dirname(__file__), "..", f"gtfs_renfe_{feed}.zip")
+        INPUT_GTFS_FD, INPUT_GTFS_ZIP = tempfile.mkstemp(suffix=".zip", prefix=f"renfe_galicia_in_{feed}_")
         INPUT_GTFS_PATH = tempfile.mkdtemp(prefix=f"renfe_galicia_in_{feed}_")
         OUTPUT_GTFS_PATH = tempfile.mkdtemp(prefix=f"renfe_galicia_out_{feed}_")
         OUTPUT_GTFS_ZIP = os.path.join(os.path.dirname(__file__), f"gtfs_renfe_galicia_{feed}.zip")
@@ -212,9 +243,12 @@ if __name__ == "__main__":
             writer.writerows(routes_in_trips)
 
         # Write new trips.txt with the trips that pass through Galicia
+        last_stop_in_trips = get_last_stop_for_trips(STOP_TIMES_FILE, trip_ids)
+
         trips_in_galicia = get_rows_by_ids(TRIPS_FILE, "trip_id", trip_ids)
         for tig in trips_in_galicia:
             tig["shape_id"] = f"Shape_{tig['trip_id'][0:5]}"
+            tig["trip_headsign"] = last_stop_in_trips[tig["trip_id"]]
         with open(
             os.path.join(OUTPUT_GTFS_PATH, "trips.txt"),
             "w",
@@ -303,6 +337,7 @@ if __name__ == "__main__":
         logging.info(
             f"GTFS data from feed {feed} has been zipped successfully at {OUTPUT_GTFS_ZIP}."
         )
+        os.close(INPUT_GTFS_FD)
         os.remove(INPUT_GTFS_ZIP)
         shutil.rmtree(INPUT_GTFS_PATH)
         shutil.rmtree(OUTPUT_GTFS_PATH)
