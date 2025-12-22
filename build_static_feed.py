@@ -271,6 +271,12 @@ if __name__ == "__main__":
                 for key, value in stop_overrides[stop["stop_id"]].items():
                     stop[key] = value
 
+            if stop["stop_name"].startswith("Estación de tren "):
+                stop["stop_name"] = stop["stop_name"][17:].strip()
+                stop["stop_name"] = " ".join([
+                    word.capitalize() for word in stop["stop_name"].split(" ") if word != "de"
+                ])
+
         with open(
             os.path.join(OUTPUT_GTFS_PATH, "stops.txt"),
             "w",
@@ -303,10 +309,12 @@ if __name__ == "__main__":
         last_stop_in_trips = get_last_stop_for_trips(STOP_TIMES_FILE, trip_ids)
 
         trips_in_galicia = get_rows_by_ids(TRIPS_FILE, "trip_id", trip_ids)
+        stops_by_id = {stop["stop_id"]: stop for stop in stops_in_trips}
+
         for tig in trips_in_galicia:
             if GENERATE_SHAPES:
                 tig["shape_id"] = f"Shape_{tig['trip_id'][0:5]}"
-            tig["trip_headsign"] = last_stop_in_trips[tig["trip_id"]]
+            tig["trip_headsign"] = stops_by_id[last_stop_in_trips[tig["trip_id"]]]["stop_name"]
         with open(
             os.path.join(OUTPUT_GTFS_PATH, "trips.txt"),
             "w",
