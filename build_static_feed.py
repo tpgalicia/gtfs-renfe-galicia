@@ -129,6 +129,42 @@ def get_rows_by_ids(input_file: str, id_field: str, ids: list[str]) -> list[dict
 
     return rows
 
+# First colour is background, second is text
+SERVICE_COLOURS = {
+    "REGIONAL": ("0658a9", "FFFFFF"),
+    "REG.EXP.": ("0658a9", "FFFFFF"),
+
+    "MD": ("EE7B2A", "000000"),
+    "AVANT": ("EE7B2A", "000000"),
+
+    "AVLO": ("9a0060", "01CFCA"),
+    "AVE": ("9a0060", "FFFFFF"),
+    "ALVIA": ("9a0060", "FFFFFF"),
+
+    "INTERCITY": ("606060", "FFFFFF"),
+
+    "TRENCELTA": ("00824A", "FFFFFF"),
+
+    # Cercanías Ferrol-Ortigueira
+    "C1": ("#EE20613", "FFFFFF")
+}
+
+
+def colour_route(route_short_name: str) -> tuple[str, str]:
+    """
+    Returns the colours to be used for a route from its short name.
+    
+    :param route_short_name: The routes.txt's route_short_name
+    :return: A tuple containing the "route_color" (background) first and "route_text_color" (text) second
+    :rtype: tuple[str, str]
+    """
+    
+    if route_short_name.upper() in SERVICE_COLOURS:
+        return SERVICE_COLOURS[route_short_name.upper()]
+    
+    print("Unknown route short name:", route_short_name)
+    return ("000000", "FFFFFF")
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(
@@ -249,6 +285,10 @@ if __name__ == "__main__":
         routes_in_trips = get_rows_by_ids(
             os.path.join(INPUT_GTFS_PATH, "routes.txt"), "route_id", route_ids
         )
+        for route in routes_in_trips:
+            route["route_color"], route["route_text_color"] = colour_route(
+                route["route_short_name"]
+            )
         with open(
             os.path.join(OUTPUT_GTFS_PATH, "routes.txt"),
             "w",
