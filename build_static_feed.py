@@ -131,15 +131,15 @@ def get_rows_by_ids(input_file: str, id_field: str, ids: list[str]) -> list[dict
 
 # First colour is background, second is text
 SERVICE_COLOURS = {
-    "REGIONAL": ("0658a9", "FFFFFF"),
-    "REG.EXP.": ("0658a9", "FFFFFF"),
+    "REGIONAL": ("9A0060", "D8D8DA"),
+    "REG.EXP.": ("9A0060", "D8D8DA"),
 
     "MD": ("EE7B2A", "000000"),
     "AVANT": ("EE7B2A", "000000"),
 
-    "AVLO": ("9a0060", "01CFCA"),
-    "AVE": ("9a0060", "FFFFFF"),
-    "ALVIA": ("9a0060", "FFFFFF"),
+    "AVLO": ("01CFCA", "000000"),
+    "AVE": ("D8D8DA", "9A0060"),
+    "ALVIA": ("D8D8DA", "9A0060"),
 
     "INTERCITY": ("606060", "FFFFFF"),
 
