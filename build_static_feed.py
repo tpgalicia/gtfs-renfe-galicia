@@ -29,6 +29,13 @@ FEEDS = {
 }
 
 
+def is_in_bounds(lat: float, lon: float) -> bool:
+    return (
+        BOUNDS["SOUTH"] <= lat <= BOUNDS["NORTH"]
+        and BOUNDS["WEST"] <= lon <= BOUNDS["EAST"]
+    )
+
+
 def get_stops_in_bounds(stops_file: str):
     with open(stops_file, "r", encoding="utf-8") as f:
         stops = csv.DictReader(f)
@@ -36,10 +43,7 @@ def get_stops_in_bounds(stops_file: str):
         for stop in stops:
             lat = float(stop["stop_lat"])
             lon = float(stop["stop_lon"])
-            if (
-                BOUNDS["SOUTH"] <= lat <= BOUNDS["NORTH"]
-                and BOUNDS["WEST"] <= lon <= BOUNDS["EAST"]
-            ):
+            if is_in_bounds(lat, lon):
                 yield stop
 
 
@@ -192,7 +196,7 @@ if __name__ == "__main__":
 
         route_ids = get_routes_for_trips(TRIPS_FILE, trip_ids)
 
-        logging.info(f"Feed parsed successfully. Stops: {len(trip_ids)}, trips: {len(trip_ids)}, routes: {len(route_ids)}")
+        logging.info(f"Feed parsed successfully. Stops: {len(stop_ids)}, trips: {len(trip_ids)}, routes: {len(route_ids)}")
         if len(trip_ids) == 0 or len(route_ids) == 0:
             logging.warning(f"No trips or routes found for feed '{feed}'. Skipping...")
             shutil.rmtree(INPUT_GTFS_PATH)
@@ -291,27 +295,104 @@ if __name__ == "__main__":
             shape_ids_total = len(set(f"Shape_{trip_id[0:5]}" for trip_id in trip_ids))
             shape_ids_generated: set[str] = set()
 
+            # Pre-load stops for quick lookup
+            stops_dict = {stop["stop_id"]: stop for stop in stops_in_trips}
+
+            # Group stop times by trip_id to avoid repeated file reads
+            stop_times_by_trip: dict[str, list[dict]] = {}
+            for st in stop_times_in_galicia:
+                tid = st["trip_id"]
+                if tid not in stop_times_by_trip:
+                    stop_times_by_trip[tid] = []
+                stop_times_by_trip[tid].append(st)
+
             OSRM_BASE_URL = f"{args.osrm_url}/route/v1/driving/"
             for trip_id in tqdm(trip_ids, total=shape_ids_total, desc="Generating shapes"):
                 shape_id = f"Shape_{trip_id[0:5]}"
                 if shape_id in shape_ids_generated:
                     continue
 
-                stop_seq = get_rows_by_ids(STOP_TIMES_FILE, "trip_id", [trip_id])
+                stop_seq = stop_times_by_trip.get(trip_id, [])
                 stop_seq.sort(key=lambda x: int(x["stop_sequence"].strip()))
 
-                coordinates = []
-                for stop_time in stop_seq:
-                    stop = get_rows_by_ids(STOPS_FILE, "stop_id", [stop_time["stop_id"]])[0]
-                    coordinates.append(f"{stop['stop_lon']},{stop['stop_lat']}")
+                if not stop_seq:
+                    continue
 
-                coords_str = ";".join(coordinates)
-                osrm_url = f"{OSRM_BASE_URL}{coords_str}?overview=full&geometries=geojson"
-                response = requests.get(osrm_url)
-                data = response.json()
+                final_shape_points = []
+                i = 0
+                while i < len(stop_seq) - 1:
+                    stop_a = stops_dict[stop_seq[i]["stop_id"]]
+                    lat_a, lon_a = float(stop_a["stop_lat"]), float(stop_a["stop_lon"])
 
-                line_path = data["routes"][0]["geometry"]
-                shape_points = line_path["coordinates"]
+                    if not is_in_bounds(lat_a, lon_a):
+                        # S_i is out of bounds. Segment S_i -> S_{i+1} is straight line.
+                        stop_b = stops_dict[stop_seq[i+1]["stop_id"]]
+                        lat_b, lon_b = float(stop_b["stop_lat"]), float(stop_b["stop_lon"])
+
+                        segment_points = [[lon_a, lat_a], [lon_b, lat_b]]
+                        if not final_shape_points:
+                            final_shape_points.extend(segment_points)
+                        else:
+                            final_shape_points.extend(segment_points[1:])
+                        i += 1
+                    else:
+                        # S_i is in bounds. Find how many subsequent stops are also in bounds.
+                        j = i + 1
+                        while j < len(stop_seq):
+                            stop_j = stops_dict[stop_seq[j]["stop_id"]]
+                            if is_in_bounds(float(stop_j["stop_lat"]), float(stop_j["stop_lon"])):
+                                j += 1
+                            else:
+                                break
+
+                        # Stops from i to j-1 are in bounds.
+                        if j > i + 1:
+                            # We have at least two consecutive stops in bounds.
+                            in_bounds_stops = stop_seq[i:j]
+                            coordinates = []
+                            for st in in_bounds_stops:
+                                s = stops_dict[st["stop_id"]]
+                                coordinates.append(f"{s['stop_lon']},{s['stop_lat']}")
+
+                            coords_str = ";".join(coordinates)
+                            osrm_url = f"{OSRM_BASE_URL}{coords_str}?overview=full&geometries=geojson"
+
+                            segment_points = []
+                            try:
+                                response = requests.get(osrm_url, timeout=10)
+                                if response.status_code == 200:
+                                    data = response.json()
+                                    if data.get("code") == "Ok":
+                                        segment_points = data["routes"][0]["geometry"]["coordinates"]
+                            except Exception:
+                                pass
+
+                            if not segment_points:
+                                # Fallback to straight lines for this whole sub-sequence
+                                segment_points = []
+                                for k in range(i, j):
+                                    s = stops_dict[stop_seq[k]["stop_id"]]
+                                    segment_points.append([float(s["stop_lon"]), float(s["stop_lat"])])
+
+                            if not final_shape_points:
+                                final_shape_points.extend(segment_points)
+                            else:
+                                final_shape_points.extend(segment_points[1:])
+
+                            i = j - 1 # Next iteration starts from S_{j-1}
+                        else:
+                            # Only S_i is in bounds, S_{i+1} is out.
+                            # Segment S_i -> S_{i+1} is straight line.
+                            stop_b = stops_dict[stop_seq[i+1]["stop_id"]]
+                            lat_b, lon_b = float(stop_b["stop_lat"]), float(stop_b["stop_lon"])
+
+                            segment_points = [[lon_a, lat_a], [lon_b, lat_b]]
+                            if not final_shape_points:
+                                final_shape_points.extend(segment_points)
+                            else:
+                                final_shape_points.extend(segment_points[1:])
+                            i += 1
+
                 shape_ids_generated.add(shape_id)
 
                 with open(
@@ -331,7 +412,7 @@ if __name__ == "__main__":
                     if f.tell() == 0:
                         writer.writeheader()
 
-                    for seq, point in enumerate(shape_points):
+                    for seq, point in enumerate(final_shape_points):
                         writer.writerow(
                             {
                                 "shape_id": shape_id,
