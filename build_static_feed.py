@@ -300,6 +300,36 @@ if __name__ == "__main__":
         routes_in_trips = get_rows_by_ids(
             os.path.join(INPUT_GTFS_PATH, "routes.txt"), "route_id", route_ids
         )
+
+        if feed == "feve":
+            feve_c1_route_ids = ["46T0001C1", "46T0002C1"]
+            new_route_id = "FEVE_C1"
+
+            # Find agency_id and a template route
+            template_route = routes_in_trips[0] if routes_in_trips else {}
+            agency_id = "1"
+            for r in routes_in_trips:
+                if r["route_id"].strip() in feve_c1_route_ids:
+                    agency_id = r.get("agency_id", "1")
+                    template_route = r
+                    break
+
+            # Filter out old routes
+            routes_in_trips = [r for r in routes_in_trips if r["route_id"].strip() not in feve_c1_route_ids]
+
+            # Add new route
+            new_route = template_route.copy()
+            new_route.update({
+                "route_id": new_route_id,
+                "route_short_name": "C1",
+                "route_long_name": "Ferrol - Xuvia - San Sadurniño - Ortigueira",
+                "route_type": "2",
+            })
+            if "agency_id" in template_route:
+                new_route["agency_id"] = agency_id
+
+            routes_in_trips.append(new_route)
+
         for route in routes_in_trips:
             route["route_color"], route["route_text_color"] = colour_route(
                 route["route_short_name"]
@@ -318,6 +348,14 @@ if __name__ == "__main__":
         last_stop_in_trips = get_last_stop_for_trips(STOP_TIMES_FILE, trip_ids)
 
         trips_in_galicia = get_rows_by_ids(TRIPS_FILE, "trip_id", trip_ids)
+
+        if feed == "feve":
+            feve_c1_route_ids = ["46T0001C1", "46T0002C1"]
+            new_route_id = "FEVE_C1"
+            for tig in trips_in_galicia:
+                if tig["route_id"].strip() in feve_c1_route_ids:
+                    tig["route_id"] = new_route_id
+
         stops_by_id = {stop["stop_id"]: stop for stop in stops_in_trips}
 
         for tig in trips_in_galicia:
