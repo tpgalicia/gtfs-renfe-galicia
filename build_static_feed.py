@@ -146,7 +146,7 @@ SERVICE_COLOURS = {
     "TRENCELTA": ("00824A", "FFFFFF"),
 
     # Cercanías Ferrol-Ortigueira
-    "C1": ("#EE20613", "FFFFFF")
+    "C1": ("F5333F", "FFFFFF")
 }
 
 
