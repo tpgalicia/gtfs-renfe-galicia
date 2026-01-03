@@ -60,5 +60,17 @@
   {
     "stop_id": "22402",
     "stop_name": "Valença do Minho"
+  },
+  {
+    "stop_id": "21010",
+    "feed_id": "general",
+    "stop_lat": 43.4880356421007,
+    "stop_lon": -8.230795701069612
+  },
+  {
+    "stop_id": "21010",
+    "feed_id": "feve",
+    "stop_lat": 43.48826050175589, 
+    "stop_lon": -8.231122670037813
   }
 ]

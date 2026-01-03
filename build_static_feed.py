@@ -158,9 +158,11 @@ def colour_route(route_short_name: str) -> tuple[str, str]:
     :return: A tuple containing the "route_color" (background) first and "route_text_color" (text) second
     :rtype: tuple[str, str]
     """
+
+    route_name_searched = route_short_name.strip().upper()
     
-    if route_short_name.upper() in SERVICE_COLOURS:
-        return SERVICE_COLOURS[route_short_name.upper()]
+    if route_name_searched in SERVICE_COLOURS:
+        return SERVICE_COLOURS[route_name_searched]
     
     print("Unknown route short name:", route_short_name)
     return ("000000", "FFFFFF")
@@ -268,7 +270,14 @@ if __name__ == "__main__":
         for stop in stops_in_trips:
             stop["stop_code"] = stop["stop_id"]
             if stop_overrides.get(stop["stop_id"], None) is not None:
-                for key, value in stop_overrides[stop["stop_id"]].items():
+                override_item = stop_overrides[stop["stop_id"]]
+
+                if override_item.get("feed_id", None) is not None and override_item["feed_id"] != feed:
+                    continue
+
+                for key, value in override_item.items():
+                    if key == "stop_id" or key == "feed_id":
+                        continue
                     stop[key] = value
 
             if stop["stop_name"].startswith("Estación de tren "):
