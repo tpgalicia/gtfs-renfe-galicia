@@ -355,6 +355,7 @@ if __name__ == "__main__":
             for tig in trips_in_galicia:
                 if tig["route_id"].strip() in feve_c1_route_ids:
                     tig["route_id"] = new_route_id
+                    tig["direction_id"] = "1" if tig["route_id"].strip()[6] == "2" else "0"
 
         stops_by_id = {stop["stop_id"]: stop for stop in stops_in_trips}
 
